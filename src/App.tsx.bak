@@ -1,0 +1,248 @@
+import { useEffect, useMemo, useState } from 'react'
+import { pickRandomThrow, resolve, THROWS, type ThrowId } from './lib/game'
+
+type Screen = 'home' | 'create' | 'join' | 'lobby' | 'match' | 'result'
+
+type Player = {
+  id: string
+  name: string
+  human: boolean
+  selected?: ThrowId
+}
+
+const seedPlayers: Player[] = [
+  { id: 'you', name: 'ACE', human: true },
+  { id: 'p2', name: 'JESSE', human: true },
+  { id: 'p3', name: 'MORDI', human: true },
+  { id: 'p4', name: 'CHIOMA', human: true },
+  { id: 'p5', name: 'RANDOMIZER', human: false },
+]
+
+export function App() {
+  const [screen, setScreen] = useState<Screen>('home')
+  const [name, setName] = useState('ACE')
+  const [room, setRoom] = useState('K9X4P')
+  const [players, setPlayers] = useState<Player[]>(seedPlayers)
+  const [round, setRound] = useState(2)
+  const [score, setScore] = useState({ you: 1, opp: 0 })
+  const [selection, setSelection] = useState<ThrowId | null>(null)
+  const [countdown, setCountdown] = useState(5)
+  const [phase, setPhase] = useState<'pick' | 'reveal' | 'result'>('pick')
+  const [opponentThrow, setOpponentThrow] = useState<ThrowId | null>(null)
+  const [result, setResult] = useState<'win' | 'lose' | 'draw' | null>(null)
+
+  const activePlayers = players.filter((p) => p.human)
+  const matchOpponent = activePlayers.find((p) => p.id !== 'you') ?? players[1]
+
+  useEffect(() => {
+    if (screen !== 'match' || phase !== 'pick') return
+    if (countdown <= 0) {
+      lockIn()
+      return
+    }
+    const timer = window.setTimeout(() => setCountdown((value) => value - 1), 1000)
+    return () => window.clearTimeout(timer)
+  }, [screen, phase, countdown])
+
+  function startMatch() {
+    setScreen('match')
+    setRound(1)
+    setScore({ you: 0, opp: 0 })
+    setSelection(null)
+    setCountdown(5)
+    setPhase('pick')
+    setResult(null)
+    setOpponentThrow(null)
+  }
+
+  function lockIn(choice = selection) {
+    if (phase !== 'pick') return
+    const ours = choice ?? pickRandomThrow()
+    const theirs = pickRandomThrow()
+    setSelection(ours)
+    setOpponentThrow(theirs)
+    setPhase('reveal')
+    window.setTimeout(() => {
+      const winner = resolve(ours, theirs)
+      const nextResult = winner === 'draw' ? 'draw' : winner === 'a' ? 'win' : 'lose'
+      setResult(nextResult)
+      setScore((current) => ({
+        you: current.you + (nextResult === 'win' ? 1 : 0),
+        opp: current.opp + (nextResult === 'lose' ? 1 : 0),
+      }))
+      setPhase('result')
+    }, 1350)
+  }
+
+  function nextRound() {
+    setRound((r) => r + 1)
+    setSelection(null)
+    setOpponentThrow(null)
+    setResult(null)
+    setCountdown(5)
+    setPhase('pick')
+  }
+
+  function openLobby() {
+    setPlayers(seedPlayers)
+    setScreen('lobby')
+  }
+
+  const displayThrow = (id: ThrowId | null) => THROWS.find((t) => t.id === id)
+
+  return (
+    <div className="app-shell">
+      <div className="noise" />
+      <header className="topbar">
+        <button className="brand-lockup" onClick={() => setScreen('home')} aria-label="Pick & Shoot home">
+          <img src="/brand-icon.png" alt="" className="brand-icon" />
+          <span>
+            <strong>PICK <em>&</em> SHOOT</strong>
+            <small>MULTIPLAYER RPS</small>
+          </span>
+        </button>
+        <div className="topbar-right">
+          <span className="online-dot" /> 2,184 PLAYING
+          <button className="ghost-icon" aria-label="Open settings">⌁</button>
+        </div>
+      </header>
+
+      {screen === 'home' && (
+        <main className="home-grid page-enter">
+          <section className="hero-copy">
+            <p className="eyebrow">ROCK · PAPER · SCISSORS · AND BEYOND</p>
+            <h1>Pick fast.<br /><span>Shoot to win.</span></h1>
+            <p className="hero-text">Fast rounds. Hidden picks. Real people. Build a room, run the bracket, and see who survives the throw.</p>
+            <div className="hero-actions">
+              <button className="primary" onClick={openLobby}>Play demo <span>→</span></button>
+              <button className="secondary" onClick={() => setScreen('create')}>Create room</button>
+            </div>
+            <div className="mini-stats">
+              <div><b>5s</b><span>PICK WINDOW</span></div>
+              <div><b>2–∞</b><span>PLAYERS</span></div>
+              <div><b>3+</b><span>RULE MODES</span></div>
+            </div>
+          </section>
+
+          <section className="hero-stage">
+            <div className="halo" />
+            <img src="/brand-mark.png" alt="Pick & Shoot emblem" className="hero-mark" />
+            <div className="stage-caption">
+              <span>LIVE MATCH</span>
+              <b>QUARTERFINALS</b>
+            </div>
+          </section>
+
+          <section className="feature-row">
+            <article><span>01</span><b>5 SECOND RUSH</b><p>Choose before the clock locks your hand.</p></article>
+            <article><span>02</span><b>TOURNAMENTS</b><p>8, 16, or weird numbers? The Randomizer keeps it moving.</p></article>
+            <article><span>03</span><b>CUSTOM RULES</b><p>Bring your own objects, counters, and chaos.</p></article>
+          </section>
+        </main>
+      )}
+
+      {screen === 'create' && (
+        <main className="panel-page page-enter">
+          <div className="panel-heading">
+            <div><p className="eyebrow">NEW ROOM</p><h2>Set the arena.</h2></div>
+            <button className="text-button" onClick={() => setScreen('home')}>Cancel</button>
+          </div>
+          <div className="settings-grid">
+            <div className="glass-card tall">
+              <label>Your name</label>
+              <input value={name} onChange={(e) => setName(e.target.value.toUpperCase().slice(0, 12))} />
+              <label>Game mode</label>
+              <div className="segmented"><button className="active">Tournament</button><button>Quick Match</button></div>
+              <label>Rules</label>
+              <div className="mode-card active"><b>Classic RPS</b><span>Rock · Paper · Scissors</span></div>
+              <div className="mode-card"><b>Custom</b><span>Up to 9 balanced choices</span></div>
+              <button className="primary full" onClick={openLobby}>Create room <span>→</span></button>
+            </div>
+            <div className="glass-card preview-card">
+              <p className="eyebrow">PREVIEW</p>
+              <img src="/brand-mark.png" alt="" />
+              <h3>Room K9X4P</h3>
+              <p>Share the code. Everyone joins the same arena.</p>
+              <div className="code-pill">K9X4P <button onClick={() => navigator.clipboard?.writeText('K9X4P')}>COPY</button></div>
+            </div>
+          </div>
+        </main>
+      )}
+
+      {screen === 'join' && (
+        <main className="center-page page-enter">
+          <div className="glass-card join-card">
+            <p className="eyebrow">JOIN A ROOM</p>
+            <h2>What's the code?</h2>
+            <input className="code-input" value={room} onChange={(e) => setRoom(e.target.value.toUpperCase().slice(0, 5))} maxLength={5} />
+            <button className="primary full" onClick={openLobby}>Enter room <span>→</span></button>
+          </div>
+        </main>
+      )}
+
+      {screen === 'lobby' && (
+        <main className="panel-page page-enter">
+          <div className="panel-heading">
+            <div><p className="eyebrow">ROOM {room}</p><h2>Ready when you are.</h2></div>
+            <div className="live-badge"><span /> WAITING FOR HOST</div>
+          </div>
+          <div className="lobby-layout">
+            <section className="glass-card players-card">
+              <div className="card-head"><b>PLAYERS</b><span>{players.filter((p) => p.human).length} HUMANS</span></div>
+              <div className="player-list">
+                {players.map((player, index) => (
+                  <div className="player-row" key={player.id}>
+                    <div className={`avatar ${player.human ? '' : 'bot'}`}>{player.human ? player.name.slice(0, 2) : '🎲'}</div>
+                    <div><b>{player.name}</b><span>{player.human ? (index === 0 ? 'HOST' : 'READY') : 'BALANCER'}</span></div>
+                    {index === 0 && <em>♛</em>}
+                  </div>
+                ))}
+              </div>
+              <button className="primary full" onClick={startMatch}>Start tournament <span>→</span></button>
+            </section>
+            <section className="lobby-side">
+              <div className="glass-card room-card"><span className="eyebrow">ROOM CODE</span><strong>{room}</strong><button onClick={() => navigator.clipboard?.writeText(room)}>Copy invite</button></div>
+              <div className="glass-card room-card"><span className="eyebrow">FORMAT</span><strong>TOURNAMENT</strong><span>5s picks · Classic RPS · Randomizer enabled</span></div>
+            </section>
+          </div>
+        </main>
+      )}
+
+      {screen === 'match' && (
+        <main className="match-page page-enter">
+          <div className="match-topline">
+            <div><span className="eyebrow">QUARTERFINAL · ROUND {round}</span><h2>Best of 3</h2></div>
+            <div className="match-score"><b>{score.you}</b><span>:</span><b>{score.opp}</b></div>
+          </div>
+          <div className="duel">
+            <section className="fighter self"><div className="fighter-name">YOU <span>ACE</span></div><div className={`throw-card ${selection ? 'locked' : ''}`}><span>{selection ? displayThrow(selection)?.glyph : '?'}</span></div><small>{selection ? 'LOCKED IN' : 'CHOOSE YOUR THROW'}</small></section>
+            <div className="versus"><span>{phase === 'pick' ? countdown : 'VS'}</span><small>{phase === 'pick' ? 'SECONDS' : 'PICK & SHOOT'}</small></div>
+            <section className="fighter opp"><div className="fighter-name"><span>{matchOpponent.name}</span> OP</div><div className={`throw-card ${phase !== 'pick' ? 'locked' : ''}`}><span>{phase === 'result' && opponentThrow ? displayThrow(opponentThrow)?.glyph : '✦'}</span></div><small>{phase === 'pick' ? 'HIDDEN' : phase === 'reveal' ? 'REVEALING' : 'REVEALED'}</small></section>
+          </div>
+          {phase === 'pick' && (
+            <div className="throw-picker">
+              {THROWS.map((item) => <button key={item.id} className={selection === item.id ? 'picked' : ''} onClick={() => setSelection(item.id)}><span>{item.glyph}</span><small>{item.label}</small></button>)}
+              <button className="shoot-button" onClick={() => lockIn()} disabled={!selection}>SHOOT <span>↗</span></button>
+            </div>
+          )}
+          {phase === 'reveal' && <div className="reveal-banner"><span>LOCKED</span><b>GET READY...</b></div>}
+          {phase === 'result' && (
+            <div className="result-panel">
+              <div><span className="eyebrow">ROUND RESULT</span><h3>{result === 'win' ? 'YOU WIN.' : result === 'lose' ? 'YOU LOSE.' : 'DRAW.'}</h3><p>{selection && opponentThrow ? `${displayThrow(selection)?.label} vs ${displayThrow(opponentThrow)?.label}` : ''}</p></div>
+              <button className="primary" onClick={() => round >= 3 ? setScreen('lobby') : nextRound()}>{round >= 3 ? 'Return to lobby' : 'Next round'} <span>→</span></button>
+            </div>
+          )}
+        </main>
+      )}
+
+      {screen === 'home' && <footer className="footer"><span>PICK & SHOOT · 0.1</span><span>SAME GAME. BIGGER PLAYGROUND.</span></footer>}
+      {screen !== 'home' && <footer className="footer"><button onClick={() => setScreen('home')}>← HOME</button><span>© PICK & SHOOT</span></footer>}
+
+      <nav className="floating-nav">
+        <button onClick={() => setScreen('home')}>HOME</button>
+        <button onClick={openLobby}>DEMO</button>
+        <button onClick={() => setScreen('join')}>JOIN</button>
+      </nav>
+    </div>
+  )
+}
