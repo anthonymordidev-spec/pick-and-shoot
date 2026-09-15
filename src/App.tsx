@@ -700,34 +700,8 @@ function AppContent() {
     requestNavigation('home')
   }
 
-  async function cancelToMultiplayer() {
-    // Leaving the Create Room flow must also leave the backend room.
-    // Otherwise the persisted active-room marker survives a page refresh
-    // and reconnect recovery drops the user straight back into that lobby.
-    if (screen === 'create' && backendRoomId && supabaseConfigured) {
-      try {
-        setBackendBusy(true)
-        await leaveBackendRoom(backendRoomId)
-      } catch (error) {
-        console.warn('Pick & Shoot cancel create room leave:', error)
-      } finally {
-        clearPersistedRoom()
-        setBackendRoomId(null)
-        setCurrentUserId(null)
-        setBackendMatchId(null)
-        setBackendRoundId(null)
-        setBackendPickDeadline(null)
-        setBackendChoices(null)
-        setBackendWinnerId(null)
-        setTournamentState(null)
-        setPlayers([])
-        setBackendBusy(false)
-      }
-      setScreen('multiplayer')
-      return
-    }
-    setRoom('')
-    setScreen('multiplayer')
+  function cancelToMultiplayer() {
+    requestNavigation('multiplayer')
   }
 
   useEffect(() => {
@@ -746,12 +720,6 @@ function AppContent() {
         if (userId !== saved!.userId) { clearPersistedRoom(); return }
         const backendPlayers = await getRoomPlayers(saved!.roomId)
         if (!alive) return
-        const stillMember = backendPlayers.some((player) => player.user_id === userId)
-        if (!stillMember) {
-          clearPersistedRoom()
-          setScreen('home')
-          return
-        }
         setCurrentUserId(userId); setBackendRoomId(saved!.roomId); setRoom(savedRoom.code); setName(saved!.name); setBestOf(savedRoom.best_of); setActiveCustomRules(savedRoom.custom_rules ? JSON.parse(JSON.stringify(savedRoom.custom_rules)) : null)
         setPlayers(backendPlayers.map((p) => ({ id: p.user_id, name: p.display_name, human: true, isHost: p.is_host, isReady: p.is_ready })))
         if (savedRoom.status === 'playing') {
@@ -765,10 +733,6 @@ function AppContent() {
         } else if (savedRoom.status === 'waiting') setScreen('lobby')
         else { clearPersistedRoom(); setScreen('home') }
       } catch (error) {
-        // A cancelled/deleted room is no longer recoverable. Clear the stale
-        // marker instead of leaving it to trap the user on the next refresh.
-        clearPersistedRoom()
-        if (alive) setScreen('home')
         console.warn('Pick & Shoot reconnect recovery:', error)
       }
     })()
@@ -777,10 +741,11 @@ function AppContent() {
 
   useEffect(() => {
     if (!supabase || !supabaseConfigured || screen !== 'lobby' || !backendRoomId) return
+    const client = supabase
     let alive = true
     const refresh = async () => {
       try {
-        const [backendRoom, backendPlayers, authResult] = await Promise.all([getRoom(backendRoomId), getRoomPlayers(backendRoomId), supabase.auth.getUser()])
+        const [backendRoom, backendPlayers, authResult] = await Promise.all([getRoom(backendRoomId), getRoomPlayers(backendRoomId), client.auth.getUser()])
         if (!alive) return
         const resolvedUserId = authResult.data.user?.id ?? currentUserId
         if (resolvedUserId && resolvedUserId !== currentUserId) setCurrentUserId(resolvedUserId)
